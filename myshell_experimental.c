@@ -6,6 +6,7 @@
 #include <string.h>
 #include <stdbool.h>
 #include <fcntl.h>
+#include <signal.h>
 
 void execute(char **args);
 void rec(char ***cmds, int i);
@@ -33,32 +34,66 @@ void rec(char*** cmds, int i){
 }
 
 void execute(char** args){
-    int file = -1;
+    int file1 = -1;
+    int file2 = -1;
+    int file3 = -1;
     int i = 0;
     for(; args[i] != NULL; i++){
-        if(strcmp(args[i], ">") == 0){
-            file = open(args[i+1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if(strcmp(args[i], ">") == 0 && args[i+1] != NULL){
+            file1 = open(args[i+1], O_WRONLY | O_CREAT | O_TRUNC, 0644);
+            break;
+        }
+    }
+    int j = 0;
+    for(; args[j] != NULL; j++){
+        if(strcmp(args[j], "<") == 0 && args[j+1] != NULL){
+            file2 = open(args[j+1], O_RDONLY);
+            break;
+        }
+    }
+    int k = 0;
+    for(; args[k] != NULL; k++){
+        if(strcmp(args[k], ">>") == 0 && args[k+1] != NULL){
+            file3 = open(args[k+1], O_WRONLY | O_APPEND | O_CREAT, 0644);
             break;
         }
     }
     
-    if(file != -1){
+    if(file1 != -1){
         args[i] = NULL;
-        dup2(file, 1);
-        close(file); 
+        dup2(file1, 1);
+        close(file1); 
+    }
+
+    if(file2 != -1){
+        args[j] = NULL;
+        dup2(file2, 0);
+        close(file2); 
+    }
+
+    if(file3 != -1){
+        args[k] = NULL;
+        dup2(file3, 1);
+        close(file3); 
     }
     execvp(args[0], args);
     perror("execvp");
     
 }
 
+void sigchld_handler(int sig){
+    while(waitpid(-1, NULL, WNOHANG) > 0);
+}
+
 int main(){
     char cmd[256];
     char **cmds[64];
+    signal(SIGCHLD, sigchld_handler);
     
     while(1){
         printf("myshell> ");
-        fgets(cmd, sizeof(cmd), stdin);
+        if(!fgets(cmd, sizeof(cmd), stdin))
+            break;
         int i = 0;
         char *raw_cmds[64];
 
@@ -73,7 +108,7 @@ int main(){
         int count = i;
         if(raw_cmds[0] == NULL) continue;
         for(int j = 0; raw_cmds[j]!=NULL; j++){
-            char *args = malloc(sizeof(char) * 64);
+            char **args = malloc(sizeof(char*) * 64);
             token = strtok(raw_cmds[j], " \t\n");
             i = 0;
             while (token != NULL) {
@@ -114,7 +149,7 @@ int main(){
             rec(cmds, count-1);
         }
         else{
-            if(!bg) wait(NULL);
+            if(!bg) waitpid(pid, NULL, 0);
             
             for(int j = 0; j < count; j++){
                 free(cmds[j]);
