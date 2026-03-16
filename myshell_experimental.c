@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <sys/wait.h>
 #include <string.h>
+#include <stdbool.h>
 #include <fcntl.h>
 
 void execute(char **args);
@@ -24,8 +25,6 @@ void rec(char*** cmds, int i){
         rec(cmds, i-1);
     }
     else{   
-        
-        waitpid(pid, NULL, 0);
         close(fd[1]);
         dup2(fd[0], 0);
         close(fd[0]);
@@ -70,11 +69,11 @@ int main(){
             i++;
         }
         raw_cmds[i] = NULL;
-
+        bool bg = false;
         int count = i;
         if(raw_cmds[0] == NULL) continue;
         for(int j = 0; raw_cmds[j]!=NULL; j++){
-            char **args = malloc(sizeof(char) * 64);
+            char *args = malloc(sizeof(char) * 64);
             token = strtok(raw_cmds[j], " \t\n");
             i = 0;
             while (token != NULL) {
@@ -84,6 +83,14 @@ int main(){
             }
             args[i] = NULL;
             cmds[j] = args;
+        }
+        char **last = cmds[count-1];
+        int k = 0;
+        while(last[k] != NULL) k++;
+
+        if(k > 0 && strcmp(last[k-1], "&") == 0){
+            bg = true;
+            last[k-1] = NULL;
         }
         if(strcmp(cmds[0][0], "exit") == 0){
             for(int j = 0; j < count; j++){
@@ -96,6 +103,9 @@ int main(){
                 if(chdir(cmds[0][1]) != 0)
                     perror("cd");
             }
+            for(int j = 0; j < count; j++){
+                free(cmds[j]);
+            }
             continue;
         }
         pid_t  pid = fork();
@@ -104,7 +114,8 @@ int main(){
             rec(cmds, count-1);
         }
         else{
-            wait(NULL);
+            if(!bg) wait(NULL);
+            
             for(int j = 0; j < count; j++){
                 free(cmds[j]);
             }
