@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <errno.h>
 
 void execute(char **args);
 void rec(char ***cmds, int i);
@@ -85,15 +86,31 @@ void sigchld_handler(int sig){
     while(waitpid(-1, NULL, WNOHANG) > 0);
 }
 
+void signal_handler(int signum) {
+    write(1, "\n", 1);
+    return;
+}
+
 int main(){
     char cmd[256];
     char **cmds[64];
     signal(SIGCHLD, sigchld_handler);
+    struct sigaction sa;
+    sa.sa_handler = signal_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;  
+    sigaction(SIGINT, &sa, NULL);
     
     while(1){
+        errno = 0;
         printf("myshell> ");
-        if(!fgets(cmd, sizeof(cmd), stdin))
-            break;
+        fflush(stdout);  
+        if(!fgets(cmd, sizeof(cmd), stdin)){
+            if(errno == EINTR){
+                continue;
+            }
+            else break;
+        }
         int i = 0;
         char *raw_cmds[64];
 
@@ -118,6 +135,10 @@ int main(){
             }
             args[i] = NULL;
             cmds[j] = args;
+        }
+        if(cmds[0][0] == NULL){
+            for(int j = 0; j < count; j++) free(cmds[j]);
+            continue;
         }
         char **last = cmds[count-1];
         int k = 0;
@@ -146,6 +167,7 @@ int main(){
         pid_t  pid = fork();
         
         if(pid == 0){
+            signal(SIGINT, SIG_DFL);
             rec(cmds, count-1);
         }
         else{
