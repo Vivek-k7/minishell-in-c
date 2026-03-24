@@ -1,4 +1,4 @@
-#include<stdio.h>
+#include <stdio.h>
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -38,6 +38,7 @@ int main(){
         if(count == 0) continue;
         if(count <= 0){
             if(count == -1) fprintf(stderr, "syntax error\n");
+            if(count == -2) fprintf(stderr, "system error\n");
             continue;
         }
 
@@ -74,7 +75,7 @@ int main(){
             last[k-1] = NULL;
         }
 
-        execute_pipeline(cmds, count, bg);
+        if(execute_pipeline(cmds, count, bg) == -1) continue;
 
     }
 }

@@ -1,6 +1,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdio.h>
+#include "utils.h"
 
 int parse_input(char *input, char ***cmds){
 
@@ -18,6 +20,10 @@ int parse_input(char *input, char ***cmds){
     if(raw_cmds[0] == NULL) return 0;
     for(int j = 0; raw_cmds[j]!=NULL; j++){
         char **args = malloc(sizeof(char*) * 64);
+        if(!args){
+            perror("malloc");
+            return -2;
+        }
         token = strtok(raw_cmds[j], " \t\n");
         i = 0;
         while (token != NULL) {
@@ -28,7 +34,7 @@ int parse_input(char *input, char ***cmds){
         args[i] = NULL;
         cmds[j] = args;
         if(args[0] == NULL){
-            for(int k = 0; k <= j; k++) free(cmds[k]);
+            free_cmds(cmds, j+1);
             return -1;
         }
     }
