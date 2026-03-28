@@ -14,6 +14,9 @@ void sigint_handler(int signum) {
 void setup_signals() {
     struct sigaction sa_chld, sa_int;
 
+    signal(SIGTTOU, SIG_IGN);
+    signal(SIGTTIN, SIG_IGN);
+    
     sa_chld.sa_handler = sigchld_handler;
     sigemptyset(&sa_chld.sa_mask);
     sa_chld.sa_flags = SA_RESTART | SA_NOCLDSTOP;

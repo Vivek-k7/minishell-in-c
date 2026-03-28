@@ -12,7 +12,10 @@
 #include "parser.h"
 #include "executor.h"
 
+pid_t shell_pgid;
+
 int main(){
+    shell_pgid = getpgrp(); 
     char cmd[256];
     char **cmds[64];
 

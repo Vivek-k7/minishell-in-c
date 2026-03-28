@@ -4,9 +4,12 @@
 #include <fcntl.h>
 #include <string.h>
 #include <stdio.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include "utils.h"
+
+extern pid_t shell_pgid;
 
 void execute(char **args);
 void rec(char ***cmds, int i);
@@ -114,11 +117,35 @@ int execute_pipeline(char ***cmds, int count, bool bg){
 
     if(pid == 0){
         signal(SIGINT, SIG_DFL);
+        signal(SIGINT,  SIG_DFL);
+        signal(SIGTTOU, SIG_DFL);
+        signal(SIGTTIN, SIG_DFL);
+        
+        setpgid(0, 0);
+        if (!bg) tcsetpgrp(0, getpgrp());
         rec(cmds, count-1);
         exit(0);
     }
     else{
-        if(!bg) while (wait(NULL) > 0);
+        setpgid(pid, pid);
+        
+        if(!bg){
+            tcsetpgrp(0, pid);
+            sigset_t mask, old;
+            sigemptyset(&mask);
+            sigaddset(&mask, SIGCHLD);
+            sigprocmask(SIG_BLOCK, &mask, &old);
+
+            int status;
+            waitpid(pid, &status, 0);
+            waitpid(pid, &status, 0);
+            if (WIFSIGNALED(status) && WTERMSIG(status) == SIGINT)
+                write(STDOUT_FILENO, "\n", 1);
+                
+            sigprocmask(SIG_UNBLOCK, &mask, NULL);
+            tcsetpgrp(0, shell_pgid);
+        }
+        
         free_cmds(cmds, count);
     }
     return 0;
