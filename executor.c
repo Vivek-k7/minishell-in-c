@@ -11,50 +11,6 @@
 
 extern pid_t shell_pgid;
 
-void execute(char **args);
-void rec(char ***cmds, int i);
-
-void rec(char*** cmds, int i){
-    if(i == 0){
-        execute(cmds[i]);
-        return;
-    }
-    int fd[2];    
-    if(pipe(fd) < 0){
-        perror("pipe");
-        exit(1);
-    }
-
-    pid_t pid1 = fork();
-
-    if(pid1 < 0){
-        perror("fork");
-        exit(1);
-    }
-
-    if(pid1 == 0){
-        close(fd[0]);
-        safe_dup2(fd[1], 1);
-        close(fd[1]);
-        rec(cmds, i-1);
-        exit(0);
-    }
-    else{   
-        pid_t pid2 = fork();
-        if(pid2 == 0){
-            close(fd[1]);
-            safe_dup2(fd[0], 0);
-            close(fd[0]);
-            execute(cmds[i]);
-        }
-        else{
-            close(fd[0]);
-            close(fd[1]);
-            while(wait(NULL) > 0);
-        }   
-    }
-}
-
 void execute(char **args){
     int infile = -1, outfile = -1;
 
@@ -117,13 +73,53 @@ int execute_pipeline(char ***cmds, int count, bool bg){
 
     if(pid == 0){
         signal(SIGINT, SIG_DFL);
-        signal(SIGINT,  SIG_DFL);
         signal(SIGTTOU, SIG_DFL);
         signal(SIGTTIN, SIG_DFL);
         
         setpgid(0, 0);
-        if (!bg) tcsetpgrp(0, getpgrp());
-        rec(cmds, count-1);
+        int pgid_coord = getpid();
+        
+        int prev_fd = -1;
+
+        for(int i = 0; i < count; i++){
+            int fd[2];
+            if(i < count-1){
+                if(pipe(fd) < 0){
+                    perror("pipe"); 
+                    exit(1); 
+                }
+            }
+
+            pid_t child = fork();
+            if(child < 0){ 
+                perror("fork"); 
+                exit(1); 
+            }
+            setpgid(child, pgid_coord);
+
+            if(child == 0){
+                setpgid(0, pgid_coord);
+                if(prev_fd != -1){       
+                    safe_dup2(prev_fd, STDIN_FILENO);
+                    close(prev_fd);
+                }
+                if(i < count-1){          
+                    close(fd[0]);
+                    safe_dup2(fd[1], STDOUT_FILENO);
+                    close(fd[1]);
+                }
+                execute(cmds[i]);
+                exit(0);
+            }
+
+            if(prev_fd != -1) close(prev_fd);
+            if(i < count-1){
+                close(fd[1]);
+                prev_fd = fd[0]; 
+            }
+        }
+
+        while(wait(NULL) > 0);  
         exit(0);
     }
     else{
@@ -138,10 +134,10 @@ int execute_pipeline(char ***cmds, int count, bool bg){
 
             int status;
             waitpid(pid, &status, 0);
-            waitpid(pid, &status, 0);
-            if (WIFSIGNALED(status) && WTERMSIG(status) == SIGINT)
+            if(WIFSIGNALED(status) && WTERMSIG(status) == SIGINT){
                 write(STDOUT_FILENO, "\n", 1);
-                
+            }
+
             sigprocmask(SIG_UNBLOCK, &mask, NULL);
             tcsetpgrp(0, shell_pgid);
         }
